@@ -1,0 +1,27 @@
+.post-office-desk__art {
+  position: relative;
+  container-type: inline-size;
+  width: min(100%, calc(100dvh * 1440 / 1024));
+  aspect-ratio: 1440 / 1024;
+  background: #fff url('/assets/post-office/postoffice-desk.svg')
+    center / 100% 100% no-repeat;
+}
+
+.house-desk__write-button {
+  position: absolute;
+  left: 50%;
+  bottom: 18%;
+  transform: translateX(-50%);
+
+  padding: 4px 24px;
+  border: 1px solid #555;
+  border-radius: 4px;
+
+  background: #fff;
+  color: #000;
+  font-family: inherit;
+  font-size: 12px;
+  text-decoration: none;
+  cursor: pointer;
+}
+

@@ -1,0 +1,123 @@
+/* One continuous white world: the two Figma artboards sit side by side on the
+   same white background, so the seam reads as one continuous space. Each
+   artboard is 1440x1024 and is scaled by height only, so proportions are preserved. The track is wider than the viewport, which is
+   what produces the horizontal scroll. */
+
+.home-world {
+  --home-world-height: 100dvh;
+
+  height: var(--home-world-height);
+  overflow-x: auto;
+  overflow-y: hidden;
+  background: #fff;
+
+  /* Firefox: thin black thumb on a transparent track. */
+  scrollbar-width: thin;
+  scrollbar-color: #000 transparent;
+}
+
+/* Chromium/Safari: exact 4px thumb, transparent track. */
+.home-world::-webkit-scrollbar {
+  height: 4px;
+  width: 4px;
+}
+
+.home-world::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.home-world::-webkit-scrollbar-thumb {
+  background: #000;
+  border: none;
+  border-radius: 0;
+}
+
+.home-world::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Sign-out control. Fixed to the viewport so it stays in the top-right corner
+   while the world scrolls horizontally; only rendered for signed-in visitors.
+   The glyph comes from the Material Symbols font loaded in index.html. */
+.home-signout {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  /* border: none; */
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  background: #fffdf7;
+  /* color: #a6813f; */
+  cursor: pointer;
+}
+
+.home-signout .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.home-signout:hover {
+  background: #B51B1B;
+  /* color: #fffdf7; */
+}
+
+/* Hover tooltip: no default styling, just 8px black text on a white box.
+   The label itself lives on the button as data-tooltip. */
+.home-signout::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 6px;
+
+  padding: 2px 5px;
+  background: #fff;
+  color: #000;
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.home-signout:hover::after,
+.home-signout:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+.home-track {
+  display: flex;
+  align-items: flex-start;
+  width: max-content;
+}
+
+.home-location {
+  display: block;
+  flex: 0 0 auto;
+  line-height: 0;
+}
+
+.home-art {
+  display: block;
+  height: var(--home-world-height);
+  width: auto;
+  transition: opacity 0.15s ease;
+}
+
+/* Temporary placeholder feedback while the interactions are placeholders. */
+.home-location:hover .home-art {
+  opacity: 0.85;
+}
+
+.home-location:focus-visible {
+  outline: 2px solid #a6813f;
+  outline-offset: -2px;
+}

@@ -1,0 +1,222 @@
+/* The paper is a real DOM element (no SVG): a portrait card that holds the
+   textarea, sized so it fits the viewport in both axes without scrolling.
+   --paper-ratio and --chrome-space drive that sizing. */
+
+.compose {
+  --paper-ratio: 3 / 4;
+  --chrome-space: 150px;
+
+  /* No global border-box reset in this project, so state it here: otherwise
+     min-height: 100dvh plus padding overflows the viewport and the page
+     scrolls vertically. */
+  box-sizing: border-box;
+
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  /* Horizontal padding leaves room for the back/next buttons, which sit
+     outside the paper's corners. */
+  padding: clamp(24px, 5vh, 48px) clamp(56px, 8vw, 80px);
+  background: #fff;
+}
+
+/* Holds the paper and the slider. The frame sets the width; the slider
+   stretches to match the paper exactly. */
+.compose__frame {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 2vh, 20px);
+  width: min(100%, 640px, calc((100dvh - var(--chrome-space)) * 0.75));
+}
+
+.compose__paper {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  aspect-ratio: var(--paper-ratio);
+  padding: clamp(18px, 4%, 36px);
+  background: #fff;
+  border: 1px solid black;
+  border-radius: 4px;
+}
+
+.compose__letter {
+  flex: 1;
+  /* min-height:0 lets the flex child shrink instead of overflowing. */
+  min-height: 0;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #000;
+  /* Serif for the letter itself; Irish Grover stays on the surrounding UI. */
+  font-family: "Times New Roman", Times, serif;
+  line-height: 1.5;
+  resize: none;
+  /* Text is trimmed to fit, so the textarea never scrolls. */
+  overflow: hidden;
+}
+
+/* The letter sits flush inside the paper, so focusing it should not draw a
+   box around the writing area. The blinking caret is the focus indicator. */
+.compose__letter:focus,
+.compose__letter:focus-visible {
+  outline: none;
+}
+
+.compose__letter::placeholder {
+  color: #a8a8a8;
+}
+
+/* Keep selected text legible and inside the black/white palette. The UA
+   default is a saturated blue, which clashes with the paper. */
+.compose__letter::selection {
+  background: #d4d4d4;
+  color: #000;
+}
+
+/* Reserves the bottom-right corner for the signature without the letter
+   text running underneath it. */
+.compose__paper-foot {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: clamp(12px, 3%, 24px);
+}
+
+/* Placeholder only -- swapped for the signature canvas later. Sized wider
+   than tall so it reads as a signing area. */
+.compose__signature {
+  width: clamp(110px, 32%, 190px);
+  aspect-ratio: 5 / 2;
+  border: 1px dashed #b4b4b4;
+  border-radius: 2px;
+}
+
+/* Back and next sit just outside opposite corners of the paper. */
+.compose__back,
+.compose__next {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #fff;
+  color: #000;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.compose__back {
+  top: 10px;
+  left: -40px;
+}
+
+.compose__next {
+  right: -40px;
+  bottom: 10px;
+}
+
+.compose__back:hover,
+.compose__next:hover {
+  background: #f3f3f3;
+}
+
+.compose__back:focus-visible,
+.compose__next:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+/* Minimal slider: hairline track, small round handle. */
+.compose__size {
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+}
+
+.compose__size::-webkit-slider-runnable-track {
+  height: 1px;
+  background: #000;
+}
+
+.compose__size::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -6px;
+  border: 1px solid #000;
+  border-radius: 50%;
+  background: #fff;
+  appearance: none;
+}
+
+.compose__size::-moz-range-track {
+  height: 1px;
+  background: #000;
+}
+
+.compose__size::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 1px solid #000;
+  border-radius: 50%;
+  background: #fff;
+}
+
+.compose__size:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 4px;
+}
+
+/* Off-screen twin of the letter, used to measure how tall a given string
+   would be. It must match the textarea's box and type exactly, so it
+   inherits the same serif, line height and wrapping. Kept out of flow with
+   visibility rather than display, so it still has a measurable height. */
+.compose__ruler {
+  position: absolute;
+  top: 0;
+  left: 0;
+  visibility: hidden;
+  pointer-events: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  font-family: "Times New Roman", Times, serif;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.compose__toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  z-index: 2;
+  margin: 0;
+  padding: 6px 14px;
+  transform: translateX(-50%);
+  background: #000;
+  color: #fff;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.compose__title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

@@ -1,0 +1,55 @@
+/* The preloader artboard is 1440x1024 and carries its own white background, so
+   it is used directly as the page background. The art box holds that exact
+   aspect ratio and is fitted to the viewport, which keeps the artwork
+   undistorted -- and because the box IS the viewBox, the button offsets below
+   (percentages of the box) line up 1:1 with coordinates in the artwork. */
+
+.preloader {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100dvh;
+  background: #fff;
+}
+
+.preloader__art {
+  position: relative;
+  container-type: inline-size;
+  width: min(100%, calc(100dvh * 1440 / 1024));
+  aspect-ratio: 1440 / 1024;
+  background-color: #fff;
+  background-image: url('/assets/preloader/preloader.svg');
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+}
+
+/* Enter button sits bottom centre, in the clear space below the artwork
+   (artwork ends at y=834 of 1024). */
+.preloader__enter {
+  text-decoration: none;
+  position: absolute;
+  left: 50%;
+  bottom: 22%;
+  transform: translateX(-50%);
+
+  padding: 8px 22px;
+  border: 1.5px solid #111;
+  border-radius: 12px;
+
+  background: #B51B1B;
+  color: #fff;
+  font-family: inherit;
+  font-size: clamp(14px, 1.8cqw, 22px);
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.preloader__enter:hover {
+  filter: brightness(0.9);
+}
+
+.preloader__enter:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: 2px;
+}

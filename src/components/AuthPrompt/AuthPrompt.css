@@ -1,0 +1,55 @@
+
+.auth-prompt-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 1rem;
+  background: rgb(0 0 0 / 45%);
+}
+
+.auth-prompt-card {
+  position: relative;
+  width: min(300px, 100%);
+  min-height: 180px;
+  padding: 2rem;
+  box-sizing: border-box;
+
+  border: 1px solid #888;
+  border-radius: 13px;
+  background: #fff;
+
+  color: #222;
+  font-family: "Irish Grover", cursive;
+}
+
+.auth-prompt-card h2 {
+  margin: 0 0 1rem;
+  font-size: 15px;
+  font-weight: normal;
+}
+
+.auth-prompt-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.auth-prompt-actions button {
+  padding: 5px 10px;
+  border: 0;
+  border-radius: 6px;
+
+  background: #b51b1b;
+  color: white;
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.auth-prompt-actions button:hover {
+  background: #921515;
+}

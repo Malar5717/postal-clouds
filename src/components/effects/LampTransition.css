@@ -1,0 +1,12 @@
+/* Sits directly on top of the artwork it covers and uses the same background
+   rules, so each frame registers 1:1 with the desk underneath. Clicks fall
+   through -- the layer is decorative only. */
+.lamp-transition {
+  position: absolute;
+  inset: 0;
+  background-color: #fff;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  pointer-events: none;
+}
