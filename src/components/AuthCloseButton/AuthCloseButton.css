@@ -1,0 +1,33 @@
+.auth-close {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 100;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  background: #fffdf7;
+  color: #3a2f20;
+
+  font-family: inherit;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.auth-close:hover {
+  background: #b51b1b;
+  color: #fffdf7;
+}
+
+.auth-close:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: 2px;
+}

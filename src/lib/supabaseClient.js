@@ -11,6 +11,7 @@ export function createSupabaseClient(getToken) {
       accessToken: async () => {
         return await getToken();
       },
+      // Authorization: Bearer <clerk_jwt>
     }
   );
 }

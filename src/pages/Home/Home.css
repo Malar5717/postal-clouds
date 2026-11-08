@@ -36,14 +36,74 @@
   background: transparent;
 }
 
-/* Sign-out control. Fixed to the viewport so it stays in the top-right corner
-   while the world scrolls horizontally; only rendered for signed-in visitors.
-   The glyph comes from the Material Symbols font loaded in index.html. */
-.home-signout {
+/* Signed-in controls. Fixed to the viewport so they stay in the top-right
+   corner while the world scrolls horizontally; only rendered for signed-in
+   visitors. The glyph comes from the Material Symbols font loaded in
+   index.html. */
+.home-user-tools {
   position: fixed;
   top: 16px;
   right: 16px;
   z-index: 10;
+
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-profile {
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  border: 1px solid rgba(0, 0, 0, 0.6);
+  border-radius: 8px;
+  background: #fffdf7;
+  color: #3a2f20;
+
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.home-profile__fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.home-profile img {
+  position: absolute;
+  inset: 0;
+
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.home-profile:hover {
+  background: #b51b1b;
+  color: #fffdf7;
+}
+
+.home-profile:focus-visible {
+  outline: 2px solid #111827;
+  outline-offset: 2px;
+}
+
+.home-signout {
+  position: relative;
 
   display: flex;
   align-items: center;

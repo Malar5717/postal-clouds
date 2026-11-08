@@ -20,10 +20,14 @@ function RequireAuth() {
   const navigate = useNavigate();
 
   /* A successful auth redirect has landed on the protected page, so the saved
-     destination is no longer needed. */
+     destination is no longer needed. Profile setup is the exception: sign-up
+     lands there before the destination is used, so keep it until that page
+     consumes or abandons it. */
   useEffect(() => {
-    if (isLoaded && isSignedIn) clearReturnTo();
-  }, [isLoaded, isSignedIn]);
+    if (isLoaded && isSignedIn && pathname !== "/profile-setup") {
+      clearReturnTo();
+    }
+  }, [isLoaded, isSignedIn, pathname]);
 
   if (!isLoaded) return null;
 

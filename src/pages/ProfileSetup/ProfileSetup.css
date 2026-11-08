@@ -1,0 +1,96 @@
+.profile-setup {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #fffdf7;
+}
+
+.profile-setup__card {
+  width: min(420px, 100%);
+  padding: 2rem;
+  box-sizing: border-box;
+
+  border: 1px solid #888;
+  border-radius: 13px;
+  background: #fff;
+  color: #222;
+}
+
+.profile-setup__card h1 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+  font-weight: normal;
+}
+
+.profile-setup__username {
+  margin: 0 0 1.25rem;
+  color: #777;
+  font-size: 0.9rem;
+}
+
+.profile-setup__message {
+  margin: 0;
+}
+
+.profile-setup__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-setup__form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.9rem;
+}
+
+.profile-setup__form input,
+.profile-setup__form textarea {
+  width: 100%;
+  padding: 7px 9px;
+  box-sizing: border-box;
+
+  border: 1px solid #999;
+  border-radius: 6px;
+  background: #fffdf7;
+  color: #222;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+.profile-setup__form textarea {
+  resize: vertical;
+}
+
+.profile-setup__form button,
+.profile-setup__card > button {
+  align-self: flex-start;
+  padding: 6px 14px;
+  border: 0;
+  border-radius: 6px;
+
+  background: #b51b1b;
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.profile-setup__form button:hover,
+.profile-setup__card > button:hover {
+  background: #921515;
+}
+
+.profile-setup__form button:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.profile-setup__error {
+  margin: 0;
+  color: #a00;
+  font-size: 0.85rem;
+}

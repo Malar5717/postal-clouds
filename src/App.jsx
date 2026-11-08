@@ -6,6 +6,7 @@ import Auth from "./pages/Auth/Auth";
 import SignUp from "./pages/Auth/SignUp/SignUp";
 import SignIn from "./pages/Auth/SignIn/SignIn";
 import Home from "./pages/Home/Home";
+import ProfileSetup from "./pages/ProfileSetup/ProfileSetup";
 import HouseDesk from "./pages/HouseDesk/HouseDesk";
 import ReadLetter from "./pages/ReadLetter/ReadLetter";
 import PostOfficeDesk from "./pages/PostOfficeDesk/PostOfficeDesk";
@@ -31,6 +32,8 @@ function App() {
         {/* Signed-in only. Anonymous visitors get the AuthPrompt, including on
             direct URLs. */}
         <Route element={<RequireAuth />}>
+          <Route path="/profile-setup" element={<ProfileSetup />} />
+
           <Route path="/letters" element={<HouseDesk />} />
           <Route path="/letters/:letterId" element={<ReadLetter />} />
           <Route path="/post-office" element={<PostOfficeDesk />} />
