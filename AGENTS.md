@@ -99,7 +99,9 @@ Routes are a flat table in `src/App.jsx` (no catch-all):
 - **Draft flow:** Compose autosaves title/content/signature to `public.letters`
   (`status = 'DRAFT'`) after 1.5 s, keeps a per-tab `sessionStorage` recovery buffer, and updates
   the same row through `/post-office/compose/:draftId`. `Drafts` lists the user’s draft rows and
-  reopens them.
+  reopens them. A blank title is stored as `Untitled` (renameable) instead of blocking the save, and
+  a letter with no title, text, or signature is not written at all, so a blank composer creates
+  nothing.
 - `RECEIVED_LETTERS` (HouseDesk) and `SENT_LETTERS` (PostOfficeDesk) are duplicated 8-item arrays
   with the same ids/titles and no shared source of truth.
 - **Signature storage:** Cloudinary receives the PNG through an unsigned upload preset; the

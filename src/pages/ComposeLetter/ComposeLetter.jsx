@@ -27,6 +27,10 @@ const TOAST_MS = 2000;
 /* Keep letter titles short enough to scan in the drafts list. */
 const MAX_TITLE_LENGTH = 80;
 
+/* A missing title must never cost someone their letter. Drafts are stored
+   with this name when the title is blank, and can be renamed later. */
+const DEFAULT_TITLE = "Untitled";
+
 /* Autosave delay after the last title/text edit. */
 const AUTOSAVE_MS = 1500;
 
@@ -38,6 +42,13 @@ const AUTOSAVE_MS = 1500;
 function composeBufferKey(userId, draftId) {
   return `postal-clouds:compose:${userId}:${draftId ?? "new"}`;
 }
+
+/* Drafts whose first save is queued or in flight. The `new` buffer is only
+   cleared when that insert resolves, so a fresh composer opened in the
+   meantime would read it and restore a letter that is already becoming a
+   draft. Keep this in memory, not storage: a reload clears it, which is what
+   lets reload recovery still work. */
+let pendingDraftCreations = 0;
 
 function readComposeBuffer(userId, routeDraftId) {
   if (!userId) return null;
@@ -65,8 +76,10 @@ function readComposeBuffer(userId, routeDraftId) {
       return bufferDraftId === routeDraftId ? normalized : null;
     }
 
-    /* A saved draft belongs to its URL, so a fresh compose must not restore it. */
-    return bufferDraftId ? null : normalized;
+    /* A saved draft belongs to its URL, and a letter whose first save is
+       still settling already belongs to a draft too, so a fresh compose must
+       not restore either. */
+    return bufferDraftId || pendingDraftCreations > 0 ? null : normalized;
   } catch {
     return null;
   }
@@ -121,6 +134,12 @@ function composeBufferPayload({
     maxFontSize,
     savedAt: Date.now(),
   };
+}
+
+/* A draft is worth writing once there is something in it. A blank composer
+   must not create an empty row just because autosave is running. */
+function hasDraftContent({ title, text, signatureData }) {
+  return Boolean(title.trim() || text.trim() || signatureData);
 }
 
 /* Cloudinary can return verbose provider messages; the toast gets a short
@@ -367,9 +386,13 @@ function ComposeLetter() {
         }
 
         const current = latestValuesRef.current;
-        const cleanTitle = current.title.trim().slice(0, MAX_TITLE_LENGTH);
 
-        if (!cleanTitle) return { skipped: true };
+        if (!hasDraftContent(current)) return { skipped: true };
+
+        /* An empty title is stored under the default name instead of blocking
+           the save; the draft can be renamed whenever. */
+        const cleanTitle =
+          current.title.trim().slice(0, MAX_TITLE_LENGTH) || DEFAULT_TITLE;
 
         /* `undefined` means leave signature_path alone (upload failed or the
            preset is missing). This keeps an older stored signature instead of
@@ -500,8 +523,23 @@ function ComposeLetter() {
       }
     };
 
+    /* An unsaved letter is about to become a draft. From here until the save
+       settles, a fresh composer must ignore the `new` buffer rather than
+       restore this letter. */
+    const creatingDraft = !latestValuesRef.current.draftId;
+    if (creatingDraft) pendingDraftCreations += 1;
+
     const next = saveChainRef.current.then(run, run);
     saveChainRef.current = next.catch(() => {});
+
+    if (creatingDraft) {
+      const settle = () => {
+        pendingDraftCreations = Math.max(0, pendingDraftCreations - 1);
+      };
+
+      next.then(settle, settle);
+    }
+
     return next;
   }, [userId, supabase, navigate]);
 
@@ -511,7 +549,7 @@ function ComposeLetter() {
       autosaveTimer.current = null;
     }
 
-    if (!latestValuesRef.current.title.trim()) return;
+    if (!hasDraftContent(latestValuesRef.current)) return;
 
     enqueueSave().catch(() => {});
   }, [enqueueSave]);
@@ -716,7 +754,8 @@ function ComposeLetter() {
   ]);
 
   useEffect(() => {
-    if (!userId || !supabase || !title.trim()) return;
+    if (!userId || !supabase) return;
+    if (!hasDraftContent({ title, text, signatureData })) return;
 
     if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
 
@@ -811,13 +850,6 @@ function ComposeLetter() {
   async function saveDraft() {
     if (savingDraft) return;
 
-    const cleanTitle = title.trim().slice(0, MAX_TITLE_LENGTH);
-
-    if (!cleanTitle) {
-      flashToast("title required");
-      return;
-    }
-
     if (!userId || !supabase) {
       flashToast("could not save draft");
       return;
@@ -834,7 +866,7 @@ function ComposeLetter() {
       }
 
       if (result?.skipped) {
-        flashToast("title required");
+        flashToast("nothing to save");
         return;
       }
 
@@ -863,9 +895,8 @@ function ComposeLetter() {
             type="text"
             value={title}
             onChange={(event) => setTitle(event.target.value)}
-            placeholder="Letter Title"
+            placeholder={DEFAULT_TITLE}
             aria-label="Letter Title"
-            aria-required="true"
             autoComplete="off"
             maxLength={MAX_TITLE_LENGTH}
           />
