@@ -4,7 +4,8 @@
 
 .compose {
   --paper-ratio: 3 / 4;
-  --chrome-space: 150px;
+  /* Extra height for the title header above the paper. */
+  --chrome-space: 220px;
 
   /* No global border-box reset in this project, so state it here: otherwise
      min-height: 100dvh plus padding overflows the viewport and the page
@@ -20,12 +21,44 @@
   background: #fff;
 }
 
+/* Sits above the paper's top-right corner, clear of the writing area. */
+.compose__draft {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 1;
+
+  padding: 5px 8px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #fff;
+  color: #000;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.compose__draft:hover {
+  background: #f3f3f3;
+}
+
+.compose__draft:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+.compose__draft:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Holds the paper and the slider. The frame sets the width; the slider
    stretches to match the paper exactly. */
 .compose__frame {
   display: flex;
   flex-direction: column;
-  gap: clamp(12px, 2vh, 20px);
+  gap: 0;
   width: min(100%, 640px, calc((100dvh - var(--chrome-space)) * 0.75));
 }
 
@@ -40,6 +73,41 @@
   background: #fff;
   border: 1px solid black;
   border-radius: 4px;
+}
+
+/* Title block sits directly above the paper, outside its border. */
+.compose__heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding-bottom: 5px;
+}
+
+.compose__title-input {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  field-sizing: content;
+
+  padding: 0 0 5px;
+  border: none;
+  border-bottom: 1px solid #000;
+  border-radius: 0;
+  background: transparent;
+  color: #000;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.compose__title-input:focus,
+.compose__title-input:focus-visible {
+  outline: none;
+  border-bottom-color: #000;
+}
+
+.compose__title-input::placeholder {
+  color: #a8a8a8;
 }
 
 .compose__letter {
@@ -82,16 +150,12 @@
 .compose__paper-foot {
   display: flex;
   justify-content: flex-end;
-  padding-top: clamp(12px, 3%, 24px);
+  padding-top: clamp(18px, 3%, 24px);
 }
 
-/* Placeholder only -- swapped for the signature canvas later. Sized wider
-   than tall so it reads as a signing area. */
+/* The slot is sized here; SignaturePad owns the canvas and its border. */
 .compose__signature {
   width: clamp(110px, 32%, 190px);
-  aspect-ratio: 5 / 2;
-  border: 1px dashed #b4b4b4;
-  border-radius: 2px;
 }
 
 /* Back and next sit just outside opposite corners of the paper. */
@@ -114,13 +178,13 @@
 }
 
 .compose__back {
-  top: 10px;
+  top: 0;
   left: -40px;
 }
 
 .compose__next {
   right: -40px;
-  bottom: 10px;
+  bottom: 0;
 }
 
 .compose__back:hover,
@@ -138,7 +202,7 @@
 .compose__size {
   width: 100%;
   height: 20px;
-  margin: 0;
+  margin: clamp(12px, 2vh, 20px) 0 0;
   background: transparent;
   cursor: pointer;
   appearance: none;

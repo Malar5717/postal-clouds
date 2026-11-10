@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 
 import RequireAuth from "./components/RequireAuth/RequireAuth";
+import SignedInLayout from "./components/SignedInLayout/SignedInLayout";
 import Preloader from "./pages/Preloader/Preloader";
 import Auth from "./pages/Auth/Auth";
 import SignUp from "./pages/Auth/SignUp/SignUp";
@@ -11,6 +12,7 @@ import HouseDesk from "./pages/HouseDesk/HouseDesk";
 import ReadLetter from "./pages/ReadLetter/ReadLetter";
 import PostOfficeDesk from "./pages/PostOfficeDesk/PostOfficeDesk";
 import ComposeLetter from "./pages/ComposeLetter/ComposeLetter";
+import Drafts from "./pages/Drafts/Drafts";
 import Post from "./pages/Post/Post";
 // import TestSupabase from "./lib/TestSupabase.jsx";
 
@@ -34,11 +36,18 @@ function App() {
         <Route element={<RequireAuth />}>
           <Route path="/profile-setup" element={<ProfileSetup />} />
 
-          <Route path="/letters" element={<HouseDesk />} />
-          <Route path="/letters/:letterId" element={<ReadLetter />} />
-          <Route path="/post-office" element={<PostOfficeDesk />} />
-          <Route path="/post-office/compose" element={<ComposeLetter />} />
-          <Route path="/post-office/post" element={<Post />} />
+          <Route element={<SignedInLayout />}>
+            <Route path="/letters" element={<HouseDesk />} />
+            <Route path="/letters/:letterId" element={<ReadLetter />} />
+            <Route path="/post-office" element={<PostOfficeDesk />} />
+            <Route path="/post-office/drafts" element={<Drafts />} />
+            <Route path="/post-office/compose" element={<ComposeLetter />} />
+            <Route
+              path="/post-office/compose/:draftId"
+              element={<ComposeLetter />}
+            />
+            <Route path="/post-office/post" element={<Post />} />
+          </Route>
         </Route>
       </Routes>
     </>

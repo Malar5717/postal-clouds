@@ -45,20 +45,24 @@ Routes are a flat table in `src/App.jsx` (no catch-all):
 | `/letters` | HouseDesk (received inbox); inside the pathless `RequireAuth` layout |
 | `/letters/:letterId` | ReadLetter placeholder; inside `RequireAuth` |
 | `/post-office` | PostOfficeDesk (sent list); inside `RequireAuth` |
-| `/post-office/compose` | ComposeLetter; inside `RequireAuth` |
+| `/post-office/drafts` | Drafts list for the signed-in user; inside `RequireAuth` |
+| `/post-office/compose` | ComposeLetter (new draft); inside `RequireAuth` |
+| `/post-office/compose/:draftId` | ComposeLetter (opens an existing draft); inside `RequireAuth` |
 | `/post-office/post` | Post placeholder; inside `RequireAuth` |
 
 - **Clerk auth is live.** `SignIn`/`SignUp` use `routing="path"` with `path` props matching the
   wildcard routes; change both together. `RequireAuth` renders `AuthPrompt` instead of redirecting;
   closing it navigates to `/home`. Prompt copy switches on `/post-office` vs the house area.
-- **Supabase is wired but unused by features.** `createSupabaseClient(getToken)` uses the
-  `accessToken` callback, so each request gets Clerk’s Bearer token. In this mode `supabase.auth.*`
-  throws — use Clerk for auth. `useSupabase()` returns `null` outside the provider.
+- **Supabase is wired and used by features.** Profiles and letter drafts read/write it.
+  `createSupabaseClient(getToken)` uses the `accessToken` callback, so each request gets Clerk’s
+  Bearer token. In this mode `supabase.auth.*` throws — use Clerk for auth. `useSupabase()` returns
+  `null` outside the provider.
 - `src/lib/TestSupabase.jsx` is a debug component currently commented out in `App.jsx`; enabling it
-  runs a one-row `users` query and logs the result. No feature reads/writes Supabase yet.
-- **Env:** `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`.
-  `.env` contains real keys (don’t print or commit it); `.env.example` has blanks. A blank Clerk
-  key white-screens the app.
+  runs a one-row `users` query and logs the result.
+- **Env:** `VITE_CLERK_PUBLISHABLE_KEY`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`,
+  `VITE_CLOUDINARY_CLOUD_NAME`, `VITE_CLOUDINARY_UPLOAD_PRESET`. `.env` contains real keys (don’t
+  print or commit it); `.env.example` has blanks. A blank Clerk key white-screens the app. Blank
+  Cloudinary values leave signatures local; drafts still save and an autosave toast reports it.
 
 ## Non-obvious constraints
 
@@ -75,20 +79,35 @@ Routes are a flat table in `src/App.jsx` (no catch-all):
 - **Type:** Irish Grover is global; only the compose letter/ruler use Times New Roman. The Google
   Fonts link ships Irish Grover 400 only (bold is synthetic). Material Symbols is loaded only for
   the logout icon.
+- **`react-signature-canvas` interop:** its UMD build exports `{ default: Component }`, so a bare
+  default import is an object at runtime. `SignaturePad` normalizes it; keep that fallback.
+- **SignaturePad load timing:** it restores `initialData` at mount. Compose keys it with
+  `signatureLoadVersion` so the saved Cloudinary image can arrive after the first render and still
+  be loaded into a fresh canvas.
 - **Compose capacity:** an off-screen `.compose__ruler` mirror plus binary search. No `maxLength`,
   no scrollbar. Over-capacity input is trimmed to the longest fitting prefix and shows a 2 s toast;
-  raising the font size instead lowers the slider `max`, never the text. Text is local state only,
-  so it is lost on navigation. `.compose__signature` is still an empty placeholder.
+  raising the font size instead lowers the slider `max`, never the text. Text is local state plus
+  draft autosave. Signatures use `react-signature-canvas`; the PNG is uploaded to Cloudinary by the
+  same autosave queue, and the secure URL is stored in `letters.signature_path`. The local PNG stays
+  in the session recovery buffer until the upload finishes.
 - Keep the scoped `react-refresh/only-export-components` disables in `src/main.jsx` and
   `src/lib/SupabaseProvider.jsx`; they are intentional (entry point / provider + hook module).
 
 ## Current state / traps
 
 - `ReadLetter` ignores `:letterId`; `Post` is only two links. Both are placeholders.
+- **Draft flow:** Compose autosaves title/content/signature to `public.letters`
+  (`status = 'DRAFT'`) after 1.5 s, keeps a per-tab `sessionStorage` recovery buffer, and updates
+  the same row through `/post-office/compose/:draftId`. `Drafts` lists the user’s draft rows and
+  reopens them.
 - `RECEIVED_LETTERS` (HouseDesk) and `SENT_LETTERS` (PostOfficeDesk) are duplicated 8-item arrays
   with the same ids/titles and no shared source of truth.
-- `react-signature-canvas` is installed but imported nowhere.
-- **Not a git repo** — deletions/overwrites are unrecoverable.
+- **Signature storage:** Cloudinary receives the PNG through an unsigned upload preset; the
+  `secure_url` goes in `letters.signature_path`. On reopen, the URL is fetched and converted to a
+  data URL before being handed to the canvas, because a cross-origin image would taint it. Replacing
+  or clearing a signature does not delete the old Cloudinary asset; unsigned uploads cannot.
+- **Uncommitted work:** this is a git repo, but the current feature work is uncommitted; do not
+  assume a deletion or overwrite can be recovered from history.
 - **Docs that mislead:** `README.md` is the stock Vite template. `PRD.md` describes Tailwind,
   Supabase Auth, and routes `/login`, `/signup`, `/compose`, `/inbox`, `/sent`, `/board`,
   `/directory`; none of those are current routes. It also names `VITE_SUPABASE_ANON_KEY`, but the
@@ -96,7 +115,10 @@ Routes are a flat table in `src/App.jsx` (no catch-all):
 
 ## Open work
 
-1. Persist composed text and wire real letter data through `useSupabase()`; de-duplicate the two
-   letter arrays and replace the two placeholder pages.
-2. Add the signature canvas without disturbing ruler measurement/capacity.
-3. Browser-verify compose (Enter at full, slider ceiling, large paste, toast wording).
+1. Wire real received/sent letter data through `useSupabase()`; de-duplicate the two letter arrays
+   and replace the two placeholder pages. Draft persistence is already implemented.
+2. Browser-verify compose (Enter at full, slider ceiling, large paste, toast wording), the
+   signature pad (draw, clear, resize, reload recovery), and the Cloudinary upload/reopen/clear
+   path with a configured unsigned preset.
+3. Add Cloudinary asset cleanup if replaced/cleared signature images need to be removed; that
+   requires a signed server-side delete because the browser only has an unsigned preset.

@@ -1,0 +1,138 @@
+/* Simple paper-white index for saved drafts. */
+.drafts {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding: clamp(72px, 10vh, 112px) clamp(24px, 6vw, 72px)
+    clamp(32px, 6vh, 64px);
+  background: #fff;
+}
+
+.drafts__shell {
+  width: min(100%, 960px);
+  margin: 0 auto;
+}
+
+.drafts__header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: clamp(24px, 5vh, 48px);
+}
+
+.drafts__title {
+  margin: 0;
+  font: inherit;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 400;
+  color: #000;
+}
+
+.drafts__back {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #fff;
+  color: #000;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  text-decoration: none;
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+
+.drafts__back:hover {
+  background: #f3f3f3;
+}
+
+.drafts__back:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+.drafts__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: clamp(12px, 2vw, 20px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.drafts__card {
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  min-height: 120px;
+  padding: 16px;
+  border: 1px solid #000;
+  border-radius: 4px;
+  background: #fff;
+  color: #000;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+
+.drafts__card:hover {
+  background: #f3f3f3;
+}
+
+.drafts__card:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+.drafts__card-title {
+  font-size: clamp(15px, 1.5vw, 18px);
+  line-height: 1.35;
+}
+
+.drafts__message {
+  display: grid;
+  justify-items: center;
+  gap: 14px;
+  margin: clamp(48px, 10vh, 96px) 0 0;
+  text-align: center;
+  font-size: 16px;
+}
+
+.drafts__message p {
+  margin: 0;
+}
+
+.drafts__action {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #000;
+  font: inherit;
+  font-size: 14px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.drafts__action:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 3px;
+}
+
+@media (max-width: 540px) {
+  .drafts {
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+
+  .drafts__grid {
+    grid-template-columns: 1fr;
+  }
+}

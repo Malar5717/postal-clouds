@@ -7,12 +7,18 @@
     center / 100% 100% no-repeat;
 }
 
-.house-desk__write-button {
+/* write and drafts share one centered row over the desk. */
+.post-office-desk__actions {
   position: absolute;
   left: 50%;
   bottom: 18%;
+  display: flex;
+  align-items: center;
+  gap: 14px;
   transform: translateX(-50%);
+}
 
+.house-desk__write-button {
   padding: 4px 24px;
   border: 1px solid #555;
   border-radius: 4px;
@@ -23,5 +29,10 @@
   font-size: 12px;
   text-decoration: none;
   cursor: pointer;
+}
+
+.house-desk__write-button:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 

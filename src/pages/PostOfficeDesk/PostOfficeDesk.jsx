@@ -52,13 +52,25 @@ function PostOfficeDesk() {
           read
         </button>
 
-        <button
-          type="button"
-          className="house-desk__write-button"
-          onClick={() => setLampPlaying(true)}
-        >
-          write
-        </button>
+        <div className="post-office-desk__actions">
+          <button
+            type="button"
+            className="house-desk__write-button"
+            disabled={lampPlaying}
+            onClick={() => setLampPlaying(true)}
+          >
+            write
+          </button>
+
+          <button
+            type="button"
+            className="house-desk__write-button"
+            disabled={lampPlaying}
+            onClick={() => navigate("/post-office/drafts")}
+          >
+            drafts
+          </button>
+        </div>
 
         <LampTransition
           play={lampPlaying}
