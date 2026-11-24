@@ -25,3 +25,10 @@ dist-ssr
 *.sw?
 
 supabase
+
+# Local ops notes
+HOSTING_PLAN.md
+HOSTING_PLAN2.md
+
+# Personal learning notes
+lessons/

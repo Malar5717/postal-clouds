@@ -6,10 +6,11 @@
 
 ## Commands & verification
 
-- npm only (`package-lock.json`). `npm run dev` · `npm run build` · `npm run lint` (`eslint .`).
-  There is no test script, test runner, TypeScript, formatter, or CI config.
-- Verified this session: `npm run lint` and `npm run build` both pass. The build prints a
-  >500 kB chunk warning and exits 0 — expected with Clerk + Supabase, not a failure.
+- npm only (`package-lock.json`). `npm run dev` · `npm run build` · `npm run lint` (`eslint .`)
+  · `npm test` (`node --test "src/**/*.test.js"`, dependency-free, no DOM). No TypeScript,
+  formatter, or CI config.
+- Verified this session: `npm run lint`, `npm test`, and `npm run build` all pass. The build prints
+  a >500 kB chunk warning and exits 0 — expected with Clerk + Supabase, not a failure.
 - No test DOM; a connected browser is not assumed. Runtime layout/timing is only verifiable
   manually through `npm run dev` + a browser; otherwise reason about measurements instead of
   claiming they were executed.
@@ -85,23 +86,33 @@ Routes are a flat table in `src/App.jsx` (no catch-all):
   `signatureLoadVersion` so the saved Cloudinary image can arrive after the first render and still
   be loaded into a fresh canvas.
 - **Compose capacity:** an off-screen `.compose__ruler` mirror plus binary search. No `maxLength`,
-  no scrollbar. Over-capacity input is trimmed to the longest fitting prefix and shows a 2 s toast;
-  raising the font size instead lowers the slider `max`, never the text. Text is local state plus
-  draft autosave. Signatures use `react-signature-canvas`; the PNG is uploaded to Cloudinary by the
-  same autosave queue, and the secure URL is stored in `letters.signature_path`. The local PNG stays
-  in the session recovery buffer until the upload finishes.
+  no trimming, and no scrollbar. Typed or pasted text shrinks the font automatically down to
+  `MIN_FONT_SIZE` (12) and recalculates the slider `max` from the complete text. Once even 12px
+  cannot fit more, `planEdit` drops the input (the letter stays unchanged) and the inline
+  non-blocking warning is shown; deleting text is still accepted. `letters.font_size` stores the
+  last chosen size, so reopening measures once at that size (`fitLoadedLetter` fast path) instead
+  of binary-searching; without a stored size it prefers 18px, falling back to 12px, warning if it
+  exceeds one page. `[edit]` recomputes the real slider ceiling once. Text is
+  local state plus draft autosave. Signatures use `react-signature-canvas`; the PNG is uploaded to
+  Cloudinary by the same autosave queue, and the secure URL is stored in `letters.signature_path`.
+  The local PNG stays in the session recovery buffer until the upload finishes.
 - Keep the scoped `react-refresh/only-export-components` disables in `src/main.jsx` and
   `src/lib/SupabaseProvider.jsx`; they are intentional (entry point / provider + hook module).
 
 ## Current state / traps
 
 - `ReadLetter` ignores `:letterId`; `Post` is only two links. Both are placeholders.
-- **Draft flow:** Compose autosaves title/content/signature to `public.letters`
+- **Draft flow:** Compose autosaves title/content/font size/signature to `public.letters`
   (`status = 'DRAFT'`) after 1.5 s, keeps a per-tab `sessionStorage` recovery buffer, and updates
-  the same row through `/post-office/compose/:draftId`. `Drafts` lists the user’s draft rows and
-  reopens them. A blank title is stored as `Untitled` (renameable) instead of blocking the save, and
+  the same row through `/post-office/compose/:draftId`. `font_size` is nullable
+  (`20261113120000_add_letter_font_size.sql`); old rows fall back to the fitting search. `Drafts`
+  lists the user’s draft rows and reopens them. A blank title is stored as `Untitled` (renameable) instead of blocking the save, and
   a letter with no title, text, or signature is not written at all, so a blank composer creates
-  nothing.
+  nothing. A draft opened by URL starts read-only; `[edit]` makes changes local (`sessionStorage`
+  only) until `[save]` writes the row. Leaving mid-edit asks Yes/No, and reopening always ignores
+  the leftover buffer in favour of the saved row. `is_explicitly_saved` is true only after a
+  deliberate `[draft]`, `[save]`, or `[>]` click; autosave omits the column so it neither sets
+  nor clears the flag, and `Drafts` tags rows where it is false as `auto-saved`.
 - `RECEIVED_LETTERS` (HouseDesk) and `SENT_LETTERS` (PostOfficeDesk) are duplicated 8-item arrays
   with the same ids/titles and no shared source of truth.
 - **Signature storage:** Cloudinary receives the PNG through an unsigned upload preset; the
@@ -119,8 +130,9 @@ Routes are a flat table in `src/App.jsx` (no catch-all):
 
 1. Wire real received/sent letter data through `useSupabase()`; de-duplicate the two letter arrays
    and replace the two placeholder pages. Draft persistence is already implemented.
-2. Browser-verify compose (Enter at full, slider ceiling, large paste, toast wording), the
-   signature pad (draw, clear, resize, reload recovery), and the Cloudinary upload/reopen/clear
-   path with a configured unsigned preset.
+2. Browser-verify compose (type and paste past capacity: no text lost, font shrinks to 12px, further
+   input is dropped with the warning, and the paper never scrolls), the signature pad (draw, clear,
+   resize, reload recovery), and the Cloudinary upload/reopen/clear path with a configured unsigned
+   preset.
 3. Add Cloudinary asset cleanup if replaced/cleared signature images need to be removed; that
    requires a signed server-side delete because the browser only has an unsigned preset.
