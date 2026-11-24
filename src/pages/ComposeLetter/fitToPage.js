@@ -47,7 +47,7 @@ export function measure(letter, ruler, candidate, size) {
 /* Largest font size the complete content fits in. If even the smallest size
    overflows, the ceiling is MIN_FONT_SIZE and `overflowing` says so. Text height
    only grows as the font grows, so a binary search is safe. */
-function fittingCeiling(letter, ruler, content) {
+export function fittingCeiling(letter, ruler, content) {
   if (measure(letter, ruler, content, MAX_FONT_SIZE)) {
     return { maxFontSize: MAX_FONT_SIZE, overflowing: false };
   }
@@ -112,15 +112,35 @@ export function planEdit(letter, ruler, currentText, candidate, requestedSize) {
   return { accepted: true, ...fitted };
 }
 
-/* Loaded letter: always keep the complete saved text and never trim it. Prefer
-   the default size when it fits; otherwise fall back to the smallest size and
-   report an overflow so the page can warn. */
-export function fitLoadedLetter(letter, ruler, content) {
+/* Loaded letter: always keep the complete saved text and never trim it.
+
+   A letter whose row stores `font_size` takes the fast path: one measurement
+   at that size is enough when it still fits, which is the normal case on the
+   screen that wrote it. Only when the stored size no longer fits (a smaller
+   window, an older row without a size) does the binary search run. Without a
+   stored size, prefer DEFAULT_FONT_SIZE, falling back to the smallest size and
+   reporting an overflow so the page can warn. */
+export function fitLoadedLetter(letter, ruler, content, storedFontSize) {
+  const stored = Number.isFinite(storedFontSize)
+    ? Math.min(Math.max(storedFontSize, MIN_FONT_SIZE), MAX_FONT_SIZE)
+    : null;
+
+  if (stored !== null && measure(letter, ruler, content, stored)) {
+    return {
+      text: content,
+      fontSize: stored,
+      maxFontSize: stored,
+      overflowing: false,
+    };
+  }
+
   const ceiling = fittingCeiling(letter, ruler, content);
   const fontSize =
-    ceiling.maxFontSize >= DEFAULT_FONT_SIZE
-      ? DEFAULT_FONT_SIZE
-      : MIN_FONT_SIZE;
+    stored !== null
+      ? Math.min(stored, ceiling.maxFontSize)
+      : ceiling.maxFontSize >= DEFAULT_FONT_SIZE
+        ? DEFAULT_FONT_SIZE
+        : MIN_FONT_SIZE;
 
   return {
     text: content,
