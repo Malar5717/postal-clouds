@@ -53,6 +53,99 @@
   cursor: default;
 }
 
+/* Read-only drafts swap the composer controls for one centered action at the
+   bottom of the page. */
+.compose__mode {
+  position: fixed;
+  bottom: clamp(14px, 3vh, 28px);
+  left: 50%;
+  z-index: 3;
+  transform: translateX(-50%);
+
+  padding: 5px 14px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #fff;
+  color: #000;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.compose__mode:hover {
+  background: #f3f3f3;
+}
+
+.compose__mode:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+.compose__mode:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Leave confirmation for unsaved edits on an opened draft. */
+.compose__dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.compose__dialog {
+  box-sizing: border-box;
+  width: min(86vw, 320px);
+  padding: 20px 22px;
+  border: 1px solid #000;
+  border-radius: 3px;
+  background: #fff;
+  text-align: center;
+}
+
+.compose__dialog-text {
+  margin: 0 0 16px;
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.compose__dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.compose__dialog-button {
+  min-width: 64px;
+  padding: 5px 12px;
+  border: 1px solid #000;
+  border-radius: 2px;
+  background: #fff;
+  color: #000;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.compose__dialog-button:hover {
+  background: #f3f3f3;
+}
+
+.compose__dialog-button:focus-visible {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+}
+
+.compose__dialog-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Holds the paper and the slider. The frame sets the width; the slider
    stretches to match the paper exactly. */
 .compose__frame {
@@ -110,6 +203,20 @@
   color: #a8a8a8;
 }
 
+/* Read-only title reads as the same underlined header without being a field. */
+.compose__title-static {
+  display: block;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+  padding: 0 0 5px;
+  border-bottom: 1px solid #000;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 16px;
+  line-height: 1;
+  overflow-wrap: anywhere;
+}
+
 .compose__letter {
   flex: 1;
   /* min-height:0 lets the flex child shrink instead of overflowing. */
@@ -123,7 +230,7 @@
   font-family: "Times New Roman", Times, serif;
   line-height: 1.5;
   resize: none;
-  /* Text is trimmed to fit, so the textarea never scrolls. */
+  /* Input stops at the page limit, so the letter never scrolls. */
   overflow: hidden;
 }
 
@@ -136,6 +243,12 @@
 
 .compose__letter::placeholder {
   color: #a8a8a8;
+}
+
+/* The read-only letter keeps the textarea's type and box; only editing is
+   gone. The text stays selectable. */
+.compose__letter--readonly {
+  cursor: default;
 }
 
 /* Keep selected text legible and inside the black/white palette. The UA
@@ -156,6 +269,12 @@
 /* The slot is sized here; SignaturePad owns the canvas and its border. */
 .compose__signature {
   width: clamp(110px, 32%, 190px);
+}
+
+/* Read-only signatures are plain images; Cloudinary serves the PNG. */
+.compose__signature-image {
+  display: block;
+  height: auto;
 }
 
 /* Back and next sit just outside opposite corners of the paper. */
@@ -241,6 +360,16 @@
   outline-offset: 4px;
 }
 
+/* Non-blocking notice under the paper. The letter remains fully editable and
+   scrollable while this is visible. */
+.compose__overflow {
+  margin: clamp(8px, 1.5vh, 12px) 0 0;
+  color: #000;
+  font-size: 13px;
+  line-height: 1.3;
+  text-align: center;
+}
+
 /* Off-screen twin of the letter, used to measure how tall a given string
    would be. It must match the textarea's box and type exactly, so it
    inherits the same serif, line height and wrapping. Kept out of flow with
@@ -272,6 +401,11 @@
   color: #fff;
   border-radius: 2px;
   font-size: 12px;
+}
+
+/* Keep the toast clear of the edit/save button on saved drafts. */
+.compose--saved .compose__toast {
+  bottom: 64px;
 }
 
 .compose__title {

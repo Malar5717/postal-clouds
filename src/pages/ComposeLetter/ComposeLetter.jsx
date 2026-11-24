@@ -9,148 +9,34 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 
 import SignaturePad from "../../components/SignaturePad/SignaturePad";
-import {
-  imageUrlToDataUrl,
-  isCloudinaryConfigured,
-  uploadSignature,
-} from "../../lib/cloudinary";
+import { imageUrlToDataUrl } from "../../lib/cloudinary";
 import { useSupabase } from "../../lib/SupabaseProvider";
+import {
+  clearComposeBuffer,
+  composeBufferPayload,
+  readComposeBuffer,
+  writeComposeBuffer,
+} from "./composeSession";
+import {
+  DEFAULT_TITLE,
+  MAX_TITLE_LENGTH,
+  loadDraft,
+  signatureErrorMessage,
+} from "./draftApi";
+import {
+  DEFAULT_FONT_SIZE,
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE,
+  fitLoadedLetter,
+  fittingCeiling,
+  planEdit,
+} from "./fitToPage";
+import useDraftSaver from "./useDraftSaver";
+import useLeaveGuard from "./useLeaveGuard";
 import "./ComposeLetter.css";
-
-/* Slider bounds for the letter text size. */
-const MIN_FONT_SIZE = 12;
-const MAX_FONT_SIZE = 40;
 
 /* How long status toasts stay up. */
 const TOAST_MS = 2000;
-
-/* Keep letter titles short enough to scan in the drafts list. */
-const MAX_TITLE_LENGTH = 80;
-
-/* A missing title must never cost someone their letter. Drafts are stored
-   with this name when the title is blank, and can be renamed later. */
-const DEFAULT_TITLE = "Untitled";
-
-/* Autosave delay after the last title/text edit. */
-const AUTOSAVE_MS = 1500;
-
-/* Per-user, per-draft, per-tab recovery buffer. Supabase is the durable copy
-   for title/text/signature URL; the local PNG keeps the signature recoverable
-   across a reload before the upload finishes. `null` is the key for a
-   not-yet-created draft, so opening another draft cannot overwrite an unsaved
-   new letter. */
-function composeBufferKey(userId, draftId) {
-  return `postal-clouds:compose:${userId}:${draftId ?? "new"}`;
-}
-
-/* Drafts whose first save is queued or in flight. The `new` buffer is only
-   cleared when that insert resolves, so a fresh composer opened in the
-   meantime would read it and restore a letter that is already becoming a
-   draft. Keep this in memory, not storage: a reload clears it, which is what
-   lets reload recovery still work. */
-let pendingDraftCreations = 0;
-
-function readComposeBuffer(userId, routeDraftId) {
-  if (!userId) return null;
-
-  try {
-    const raw = window.sessionStorage.getItem(
-      composeBufferKey(userId, routeDraftId),
-    );
-    if (!raw) return null;
-
-    const buffer = JSON.parse(raw);
-    if (
-      !buffer ||
-      typeof buffer.title !== "string" ||
-      typeof buffer.text !== "string"
-    ) {
-      return null;
-    }
-
-    const bufferDraftId =
-      typeof buffer.draftId === "string" ? buffer.draftId : null;
-    const normalized = { ...buffer, draftId: bufferDraftId };
-
-    if (routeDraftId) {
-      return bufferDraftId === routeDraftId ? normalized : null;
-    }
-
-    /* A saved draft belongs to its URL, and a letter whose first save is
-       still settling already belongs to a draft too, so a fresh compose must
-       not restore either. */
-    return bufferDraftId || pendingDraftCreations > 0 ? null : normalized;
-  } catch {
-    return null;
-  }
-}
-
-function writeComposeBuffer(userId, draftId, value) {
-  if (!userId) return;
-
-  try {
-    window.sessionStorage.setItem(
-      composeBufferKey(userId, draftId),
-      JSON.stringify(value),
-    );
-  } catch {
-    /* Storage can be unavailable or full; server autosave still applies. */
-  }
-}
-
-function clearComposeBuffer(userId, draftId) {
-  if (!userId) return;
-
-  try {
-    window.sessionStorage.removeItem(composeBufferKey(userId, draftId));
-  } catch {
-    /* Storage can be unavailable; nothing to clean up. */
-  }
-}
-
-/* The buffer only needs the PNG while it is newer than the durable copies.
-   Once an upload has returned a URL and nothing is dirty, Cloudinary and the
-   row hold the image, so the buffer keeps just the URL and the reopen path
-   fetches the PNG back. A dirty or URL-less signature keeps the drawing,
-   because nothing else can recover it yet. */
-function composeBufferPayload({
-  draftId,
-  title,
-  text,
-  signatureData,
-  signatureUrl,
-  signatureDirty,
-  fontSize,
-  maxFontSize,
-}) {
-  return {
-    draftId,
-    title,
-    text,
-    signatureData: signatureDirty || !signatureUrl ? signatureData : null,
-    signatureUrl,
-    signatureDirty,
-    fontSize,
-    maxFontSize,
-    savedAt: Date.now(),
-  };
-}
-
-/* A draft is worth writing once there is something in it. A blank composer
-   must not create an empty row just because autosave is running. */
-function hasDraftContent({ title, text, signatureData }) {
-  return Boolean(title.trim() || text.trim() || signatureData);
-}
-
-/* Cloudinary can return verbose provider messages; the toast gets a short
-   version, while the full error is still available on the save result. */
-function signatureErrorMessage(error) {
-  if (error?.message === "signature storage is not configured") {
-    return "signature storage is not configured";
-  }
-
-  return "signature not stored";
-}
 
 /* Letter composer. Drafts persist to public.letters; recipient selection,
    delivery options, and posting are still to come. */
@@ -160,12 +46,20 @@ function ComposeLetter() {
   const navigate = useNavigate();
   const { draftId: routeDraftId = null } = useParams();
 
+  /* A draft opened by URL is durable: it starts read-only, and edits stay
+     local until the user explicitly saves. A brand-new letter keeps the
+     existing always-editable, autosaving composer. */
+  const [isSavedDraft] = useState(Boolean(routeDraftId));
+  const [isEditing, setIsEditing] = useState(!isSavedDraft);
+  const [draftLoaded, setDraftLoaded] = useState(!isSavedDraft);
+  const [initialRouteDraftId] = useState(routeDraftId);
+
   const [initialBuffer] = useState(() =>
     readComposeBuffer(userId, routeDraftId),
   );
   const restoredFontSize = Number.isFinite(initialBuffer?.fontSize)
     ? Math.min(Math.max(initialBuffer.fontSize, MIN_FONT_SIZE), MAX_FONT_SIZE)
-    : 18;
+    : DEFAULT_FONT_SIZE;
   const restoredMaxFontSize = Number.isFinite(initialBuffer?.maxFontSize)
     ? Math.min(
         Math.max(initialBuffer.maxFontSize, restoredFontSize),
@@ -195,15 +89,13 @@ function ComposeLetter() {
     routeDraftId ?? initialBuffer?.draftId ?? null,
   );
   const [savingDraft, setSavingDraft] = useState(false);
+  const [isOverflowing, setIsOverflowing] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
   const [showToast, setShowToast] = useState(false);
 
   const letterRef = useRef(null);
   const rulerRef = useRef(null);
   const toastTimer = useRef(null);
-  /* Scroll offset to restore after a rejected input. */
-  const keepScrollTop = useRef(null);
-  const autosaveTimer = useRef(null);
   const latestValuesRef = useRef({
     title,
     text,
@@ -223,28 +115,30 @@ function ComposeLetter() {
         : null,
     url: initialSignatureUrl,
   });
-  const saveChainRef = useRef(Promise.resolve());
-  const lastAutosaveErrorRef = useRef("");
-  const lastSignatureErrorRef = useRef("");
   const signatureTouchedRef = useRef(false);
   const restoreStateRef = useRef(null);
-  const installedRef = useRef(true);
   const loadedDraftIdRef = useRef(null);
-  const recoveredDraftRef = useRef(
-    Boolean(
-      initialBuffer?.draftId &&
-        routeDraftId &&
-        initialBuffer.draftId === routeDraftId,
-    ),
-  );
+  const lastSignatureErrorRef = useRef("");
+  /* The version that is currently durable in Supabase, used by [No] to put
+     the letter back before leaving. */
+  const savedSnapshotRef = useRef(null);
 
+  const {
+    leaveRequest,
+    setLeaveRequest,
+    armHistorySentinel,
+    dropHistorySentinel,
+    finishLeave,
+    cancelLeave,
+  } = useLeaveGuard({ active: isSavedDraft && isEditing });
+
+  /* Edits from a previous editing session are discarded on reopen, so the
+     stale local copy is dropped as soon as the URL draft is opened. */
   useEffect(() => {
-    installedRef.current = true;
+    if (!userId || !initialRouteDraftId) return;
 
-    return () => {
-      installedRef.current = false;
-    };
-  }, []);
+    clearComposeBuffer(userId, initialRouteDraftId);
+  }, [userId, initialRouteDraftId]);
 
   useEffect(
     () => () => {
@@ -253,98 +147,47 @@ function ComposeLetter() {
     [],
   );
 
-  /* Rejected input puts the caret past the visible area, which scrolls the
-     textarea and hides the first line even though the text is unchanged.
-     Restoring the offset after the DOM settles puts the view back. */
-  useLayoutEffect(() => {
-    const letter = letterRef.current;
-    if (!letter || keepScrollTop.current === null) return;
-
-    letter.scrollTop = keepScrollTop.current;
-    keepScrollTop.current = null;
-  }, [text, fontSize]);
-
-  /* Mirrors the letter text into an off-screen element that matches the
-     textarea's box and type, so its height is what the text would really
-     occupy. This measures the true limit instead of guessing a character
-     count, and it re-measures on every change. */
-  function measure(candidate, size) {
-    const letter = letterRef.current;
-    const ruler = rulerRef.current;
-    if (!letter || !ruler) return true;
-
-    ruler.style.fontSize = `${size}px`;
-    ruler.style.width = `${letter.getBoundingClientRect().width}px`;
-    ruler.textContent = candidate;
-
-    return ruler.scrollHeight <= letter.clientHeight;
-  }
-
-  /* Largest leading slice of `candidate` that still fits the paper. Text
-     height only grows with length, so a binary search is safe and keeps the
-     number of layouts low even for a large paste. */
-  function clampToFit(candidate, size) {
-    if (measure(candidate, size)) return candidate;
-
-    let low = 0;
-    let high = candidate.length;
-
-    while (low < high) {
-      const middle = Math.ceil((low + high) / 2);
-
-      if (measure(candidate.slice(0, middle), size)) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
-    }
-
-    return candidate.slice(0, low);
-  }
-
-  /* Biggest font size, at or above the current one, that the given content
-     still fits in. This is what caps the slider: rather than shrinking the
-     letter to make a bigger font fit, the font is not allowed to grow. */
-  function largestFittingSize(content, current) {
-    if (measure(content, MAX_FONT_SIZE)) return MAX_FONT_SIZE;
-
-    /* `current` is known to fit, so it is the lower bound. */
-    let low = current;
-    let high = MAX_FONT_SIZE;
-
-    while (low < high) {
-      const middle = Math.ceil((low + high) / 2);
-
-      if (measure(content, middle)) {
-        low = middle;
-      } else {
-        high = middle - 1;
-      }
-    }
-
-    return low;
-  }
-
-  /* Recomputes the ceiling after any change to the text or the font size,
-     so the limit tracks what is actually on the paper right now. */
+  /* Applies an edit only while it still fits the paper at the smallest size.
+     When the page is full the edit is dropped and the letter stays as it was,
+     so typing stops instead of overflowing or losing text. */
   function applyState(nextText, nextSize) {
     const size = nextSize ?? fontSize;
-    const fitted = clampToFit(nextText, size);
 
-    setText(fitted);
-    setFontSize(size);
-    setMaxFontSize(largestFittingSize(fitted, size));
+    const edit = planEdit(
+      letterRef.current,
+      rulerRef.current,
+      text,
+      nextText,
+      size,
+    );
+
+    setIsOverflowing(edit.overflowing);
+
+    if (!edit.accepted) return;
+
+    setText(edit.text);
+    setFontSize(edit.fontSize);
+    setMaxFontSize(edit.maxFontSize);
   }
 
-  /* A letter saved on a larger screen can be longer than the paper at the
-     current size. Loading must never trim it, so prefer 18px when it fits and
-     otherwise fall back to the smallest size. */
-  function restoreState(content) {
-    const size = measure(content, 18) ? 18 : MIN_FONT_SIZE;
+  /* Loads the stored size when it still fits the current paper (one
+     measurement), otherwise searches for one that does. Loading keeps every
+     character and warns when even the smallest size overflows. Returns the
+     result so the durable snapshot can remember the loaded size. */
+  function restoreState(content, storedFontSize) {
+    const restored = fitLoadedLetter(
+      letterRef.current,
+      rulerRef.current,
+      content,
+      storedFontSize,
+    );
 
-    setText(content);
-    setFontSize(size);
-    setMaxFontSize(largestFittingSize(content, size));
+    setText(restored.text);
+    setFontSize(restored.fontSize);
+    setMaxFontSize(restored.maxFontSize);
+    setIsOverflowing(restored.overflowing);
+
+    return restored;
   }
 
   const flashToast = useCallback((message) => {
@@ -354,6 +197,26 @@ function ComposeLetter() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setShowToast(false), TOAST_MS);
   }, []);
+
+  const { enqueueSave } = useDraftSaver({
+    userId,
+    supabase,
+    navigate,
+    isSavedDraft,
+    title,
+    text,
+    signatureData,
+    draftId,
+    fontSize,
+    latestValuesRef,
+    uploadedSignatureRef,
+    loadedDraftIdRef,
+    lastSignatureErrorRef,
+    flashToast,
+    setDraftId,
+    setSignatureUrl,
+    setSignatureDirty,
+  });
 
   /* SignaturePad reports on mouse/touch up. A local drawing or clear has no
      valid uploaded URL yet, so drop the old pair immediately; the autosave
@@ -374,199 +237,6 @@ function ComposeLetter() {
     setSignatureUrl(null);
     setSignatureDirty(true);
   }, []);
-
-  /* Saves the latest title/text/signature. Calls are serialized so an older
-     request can never overwrite a newer one, and the first insert upgrades
-     every queued save to an update of that same draft. */
-  const enqueueSave = useCallback(() => {
-    const run = async () => {
-      try {
-        if (!userId || !supabase) {
-          return { error: new Error("could not save draft") };
-        }
-
-        const current = latestValuesRef.current;
-
-        if (!hasDraftContent(current)) return { skipped: true };
-
-        /* An empty title is stored under the default name instead of blocking
-           the save; the draft can be renamed whenever. */
-        const cleanTitle =
-          current.title.trim().slice(0, MAX_TITLE_LENGTH) || DEFAULT_TITLE;
-
-        /* `undefined` means leave signature_path alone (upload failed or the
-           preset is missing). This keeps an older stored signature instead of
-           clearing it when a new local drawing cannot be uploaded. */
-        let signaturePath;
-        let signatureError = null;
-        const uploaded = uploadedSignatureRef.current;
-
-        if (current.signatureData === uploaded.dataUrl) {
-          signaturePath = uploaded.url;
-        } else if (!current.signatureData) {
-          signaturePath = null;
-          uploadedSignatureRef.current = { dataUrl: null, url: null };
-        } else if (!isCloudinaryConfigured()) {
-          signatureError = new Error("signature storage is not configured");
-        } else {
-          const signatureSnapshot = current.signatureData;
-
-          try {
-            const uploadedUrl = await uploadSignature(signatureSnapshot);
-            signaturePath = uploadedUrl;
-
-            /* The pad may have moved on while the image was uploading. Do not
-               attach this URL to a newer local signature. */
-            if (latestValuesRef.current.signatureData === signatureSnapshot) {
-              uploadedSignatureRef.current = {
-                dataUrl: signatureSnapshot,
-                url: uploadedUrl,
-              };
-              latestValuesRef.current = {
-                ...latestValuesRef.current,
-                signatureUrl: uploadedUrl,
-              };
-
-              if (installedRef.current) {
-                setSignatureUrl(uploadedUrl);
-              }
-            }
-          } catch (uploadError) {
-            signatureError = uploadError;
-          }
-        }
-
-        const values = {
-          title: cleanTitle,
-          content: current.text,
-        };
-
-        if (signaturePath !== undefined) {
-          values.signature_path = signaturePath;
-        }
-
-        const { data, error } = current.draftId
-          ? await supabase
-              .from("letters")
-              .update(values)
-              .eq("id", current.draftId)
-              .eq("sender_id", userId)
-              .eq("status", "DRAFT")
-              .select("id")
-              .single()
-          : await supabase
-              .from("letters")
-              .insert({
-                ...values,
-                sender_id: userId,
-                recipient_id: null,
-                delivery_type: null,
-                status: "DRAFT",
-              })
-              .select("id")
-              .single();
-
-        if (error) return { error };
-
-        const signatureStillCurrent =
-          latestValuesRef.current.signatureData === current.signatureData;
-        const nextSignatureDirty = Boolean(signatureError);
-
-        if (signatureStillCurrent) {
-          latestValuesRef.current = {
-            ...latestValuesRef.current,
-            signatureDirty: nextSignatureDirty,
-          };
-
-          if (signaturePath !== undefined) {
-            latestValuesRef.current = {
-              ...latestValuesRef.current,
-              signatureUrl: signaturePath,
-            };
-          }
-
-          if (installedRef.current) {
-            if (
-              signaturePath !== undefined &&
-              signaturePath !== current.signatureUrl
-            ) {
-              setSignatureUrl(signaturePath);
-            }
-            if (nextSignatureDirty !== current.signatureDirty) {
-              setSignatureDirty(nextSignatureDirty);
-            }
-          }
-        }
-
-        if (!current.draftId && data?.id) {
-          latestValuesRef.current = {
-            ...latestValuesRef.current,
-            draftId: data.id,
-          };
-          loadedDraftIdRef.current = data.id;
-          writeComposeBuffer(
-            userId,
-            data.id,
-            composeBufferPayload({ ...latestValuesRef.current, draftId: data.id }),
-          );
-          clearComposeBuffer(userId, null);
-
-          if (installedRef.current) {
-            setDraftId(data.id);
-            navigate(`/post-office/compose/${data.id}`, { replace: true });
-          }
-        }
-
-        return { data, signatureError };
-      } catch (error) {
-        return { error };
-      }
-    };
-
-    /* An unsaved letter is about to become a draft. From here until the save
-       settles, a fresh composer must ignore the `new` buffer rather than
-       restore this letter. */
-    const creatingDraft = !latestValuesRef.current.draftId;
-    if (creatingDraft) pendingDraftCreations += 1;
-
-    const next = saveChainRef.current.then(run, run);
-    saveChainRef.current = next.catch(() => {});
-
-    if (creatingDraft) {
-      const settle = () => {
-        pendingDraftCreations = Math.max(0, pendingDraftCreations - 1);
-      };
-
-      next.then(settle, settle);
-    }
-
-    return next;
-  }, [userId, supabase, navigate]);
-
-  const flushAutosave = useCallback(() => {
-    if (autosaveTimer.current) {
-      clearTimeout(autosaveTimer.current);
-      autosaveTimer.current = null;
-    }
-
-    if (!hasDraftContent(latestValuesRef.current)) return;
-
-    enqueueSave().catch(() => {});
-  }, [enqueueSave]);
-
-  /* In-app navigation unmounts the composer without firing `pagehide`, so a
-     debounce that is still waiting would never reach the server; the row would
-     stay stale until the draft is reopened, even though this tab still has the
-     text. Flushing on unmount sends those last keystrokes. The save reads
-     `latestValuesRef`, and `enqueueSave` is idempotent, so an exit right after
-     a completed save just repeats the same values. */
-  const flushRef = useRef(flushAutosave);
-
-  useEffect(() => {
-    flushRef.current = flushAutosave;
-  }, [flushAutosave]);
-
-  useEffect(() => () => flushRef.current(), []);
 
   useEffect(() => {
     latestValuesRef.current = {
@@ -595,9 +265,11 @@ function ComposeLetter() {
   });
 
   /* sessionStorage is written synchronously after each render so a reload
-     cannot lose the keystrokes that have not reached the server yet. */
+     cannot lose the keystrokes that have not reached the server yet. Only an
+     editable letter has anything to recover; read-only drafts must not write
+     buffers at all. */
   useLayoutEffect(() => {
-    if (!userId) return;
+    if (!userId || !isEditing) return;
     if (routeDraftId && !title.trim() && !text) return;
 
     writeComposeBuffer(
@@ -625,25 +297,20 @@ function ComposeLetter() {
     signatureDirty,
     fontSize,
     maxFontSize,
+    isEditing,
   ]);
 
-  /* A URL draft id is authoritative on a cold load. A recovery buffer for the
-     same draft wins for title/text because it may hold newer keystrokes; its
-     signature wins only when it has unsaved local changes. */
+  /* A URL draft id is authoritative on a cold load. Local edits from an
+     earlier editing session are deliberately ignored: a reopened draft always
+     shows the durable Supabase version. */
   useEffect(() => {
     if (!routeDraftId || !userId || !supabase) return;
     if (loadedDraftIdRef.current === routeDraftId) return;
 
     let cancelled = false;
 
-    async function loadDraft() {
-      const { data, error } = await supabase
-        .from("letters")
-        .select("id, title, content, signature_path")
-        .eq("id", routeDraftId)
-        .eq("sender_id", userId)
-        .eq("status", "DRAFT")
-        .maybeSingle();
+    async function loadSavedDraft() {
+      const { data, error } = await loadDraft(supabase, userId, routeDraftId);
 
       if (cancelled) return;
 
@@ -667,41 +334,38 @@ function ComposeLetter() {
 
       loadedDraftIdRef.current = data.id;
       setDraftId(data.id);
+      setDraftLoaded(true);
 
-      if (!recoveredDraftRef.current) {
-        setTitle(data.title ?? "");
+      setTitle(data.title ?? "");
 
-        if (restoreStateRef.current) {
-          restoreStateRef.current(data.content ?? "");
-        } else {
-          setText(data.content ?? "");
-          setFontSize(MIN_FONT_SIZE);
-        }
+      let restored = null;
+
+      if (restoreStateRef.current) {
+        restored = restoreStateRef.current(
+          data.content ?? "",
+          data.font_size,
+        );
+      } else {
+        setText(data.content ?? "");
+        setFontSize(MIN_FONT_SIZE);
       }
 
       /* The pad may have been used while the row was loading. That new local
          signature is newer than anything on the row, so never replace it. */
       if (signatureTouchedRef.current) return;
 
-      const bufferedSignatureDirty = Boolean(initialBuffer?.signatureDirty);
-      const bufferedSignatureData =
-        typeof initialBuffer?.signatureData === "string"
-          ? initialBuffer.signatureData
-          : null;
-      const bufferedSignatureUrl =
-        typeof initialBuffer?.signatureUrl === "string"
-          ? initialBuffer.signatureUrl
-          : null;
-
-      /* A dirty buffer, or one with a local drawing, is already authoritative.
-         A clean buffer without a drawing still needs the saved URL, which is
-         the common reopen path. */
-      if (bufferedSignatureDirty || bufferedSignatureData) return;
-
       const storedSignatureUrl =
         (typeof data.signature_path === "string" && data.signature_path) ||
-        bufferedSignatureUrl ||
         null;
+
+      savedSnapshotRef.current = {
+        title: data.title ?? "",
+        text: data.content ?? "",
+        fontSize: restored?.fontSize ?? MIN_FONT_SIZE,
+        signatureData: null,
+        signatureUrl: storedSignatureUrl,
+        signatureDirty: false,
+      };
 
       latestValuesRef.current = {
         ...latestValuesRef.current,
@@ -732,6 +396,12 @@ function ComposeLetter() {
           dataUrl,
           url: storedSignatureUrl,
         };
+        savedSnapshotRef.current = {
+          ...savedSnapshotRef.current,
+          signatureData: dataUrl,
+          signatureUrl: storedSignatureUrl,
+          signatureDirty: false,
+        };
         setSignatureData(dataUrl);
         setSignatureLoadVersion((version) => version + 1);
       } catch {
@@ -739,7 +409,7 @@ function ComposeLetter() {
       }
     }
 
-    loadDraft();
+    loadSavedDraft();
 
     return () => {
       cancelled = true;
@@ -748,105 +418,183 @@ function ComposeLetter() {
     routeDraftId,
     userId,
     supabase,
-    initialBuffer,
     flashToast,
     navigate,
   ]);
 
-  useEffect(() => {
-    if (!userId || !supabase) return;
-    if (!hasDraftContent({ title, text, signatureData })) return;
+  /* The font shrinks automatically as the letter grows. Once the page is full
+     at the smallest size, further input is dropped (the value stays as it was)
+     and the warning explains why; nothing already written is ever lost. */
+  function handleChange(event) {
+    applyState(event.target.value, fontSize);
+  }
 
-    if (autosaveTimer.current) clearTimeout(autosaveTimer.current);
+  /* The slider only offers sizes that still fit, but applyState clamps the
+     request anyway so a stale maximum can never force text off the page. */
+  function handleFontSizeChange(event) {
+    applyState(text, Number(event.target.value));
+  }
 
-    autosaveTimer.current = setTimeout(() => {
-      autosaveTimer.current = null;
+  /* A letter loaded at its stored size only knows that *that* size fits, not
+     the true ceiling. Editing offers the slider, so compute the ceiling once
+     here rather than on every render. */
+  function enterEditMode() {
+    const ceiling = fittingCeiling(
+      letterRef.current,
+      rulerRef.current,
+      text,
+    );
 
-      enqueueSave()
-        .then((result) => {
-          if (result?.error) {
-            const message = result.error?.message || "could not autosave";
-            if (lastAutosaveErrorRef.current !== message) {
-              lastAutosaveErrorRef.current = message;
-              flashToast(message);
-            }
-            return;
-          }
+    setMaxFontSize(ceiling.maxFontSize);
+    setIsOverflowing(ceiling.overflowing);
+    setIsEditing(true);
+  }
 
-          lastAutosaveErrorRef.current = "";
+  /* Writes the latest local values to the existing draft row. Returns true
+     only when the row is durable, so callers can choose to close the editor or
+     keep it open with the changes intact. `explicit` is true only when the
+     click that led here was [save] or [>] (a deliberate save), never for
+     autosave. */
+  async function commitEditedDraft(explicit = false) {
+    if (savingDraft) return false;
 
-          if (result?.signatureError) {
-            const message = signatureErrorMessage(result.signatureError);
-            if (lastSignatureErrorRef.current !== message) {
-              lastSignatureErrorRef.current = message;
-              flashToast(message);
-            }
-          } else {
-            lastSignatureErrorRef.current = "";
-          }
-        })
-        .catch(() => {});
-    }, AUTOSAVE_MS);
-
-    return () => {
-      if (autosaveTimer.current) {
-        clearTimeout(autosaveTimer.current);
-        autosaveTimer.current = null;
-      }
-    };
-  }, [
-    title,
-    text,
-    signatureData,
-    draftId,
-    userId,
-    supabase,
-    enqueueSave,
-    flashToast,
-  ]);
-
-  /* Best-effort flush when the tab is hidden or unloaded. The sessionStorage
-     buffer is the guaranteed reload recovery path. */
-  useEffect(() => {
-    function handleVisibilityChange() {
-      if (document.visibilityState === "hidden") flushAutosave();
+    if (!userId || !supabase) {
+      flashToast("could not save draft");
+      return false;
     }
 
-    window.addEventListener("pagehide", flushAutosave);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+    setSavingDraft(true);
 
-    return () => {
-      window.removeEventListener("pagehide", flushAutosave);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    try {
+      const result = await enqueueSave({ explicit });
+
+      if (result?.error) {
+        flashToast(result.error?.message || "could not save draft");
+        return false;
+      }
+
+      if (result?.skipped) {
+        flashToast("nothing to save");
+        return false;
+      }
+
+      clearComposeBuffer(userId, draftId);
+
+      savedSnapshotRef.current = {
+        title: latestValuesRef.current.title,
+        text: latestValuesRef.current.text,
+        fontSize: latestValuesRef.current.fontSize,
+        signatureData: latestValuesRef.current.signatureData,
+        signatureUrl: latestValuesRef.current.signatureUrl,
+        signatureDirty: false,
+      };
+
+      flashToast(
+        result?.signatureError
+          ? `draft saved; ${signatureErrorMessage(result.signatureError)}`
+          : "draft saved",
+      );
+
+      return true;
+    } catch {
+      flashToast("could not save draft");
+      return false;
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  /* [save] keeps the letter open, now in read-only mode. This is a deliberate
+     save, so it also clears the Drafts "auto-saved" tag. */
+  async function saveEditedDraft() {
+    const saved = await commitEditedDraft(true);
+
+    if (!saved) return;
+
+    dropHistorySentinel();
+    setIsEditing(false);
+  }
+
+  /* [No] puts the durable version back in place before leaving, so discarded
+     edits never survive the navigation. */
+  function restoreSavedDraft() {
+    const snapshot = savedSnapshotRef.current;
+    if (!snapshot) return;
+
+    setTitle(snapshot.title);
+
+    if (restoreStateRef.current) {
+      restoreStateRef.current(snapshot.text, snapshot.fontSize);
+    } else {
+      setText(snapshot.text);
+    }
+
+    setSignatureData(snapshot.signatureData);
+    setSignatureUrl(snapshot.signatureUrl);
+    setSignatureDirty(false);
+    setSignatureLoadVersion((version) => version + 1);
+
+    uploadedSignatureRef.current = {
+      dataUrl: snapshot.signatureData,
+      url: snapshot.signatureUrl,
     };
-  }, [flushAutosave]);
 
-  /* Reject only the excess that was just added. Existing content is always
-     a prefix that already fitted, so it is never removed. The toast fires
-     only here, on a real attempt to exceed the limit. */
-  function handleChange(event) {
-    const candidate = event.target.value;
+    latestValuesRef.current = {
+      ...latestValuesRef.current,
+      title: snapshot.title,
+      text: snapshot.text,
+      fontSize: snapshot.fontSize,
+      signatureData: snapshot.signatureData,
+      signatureUrl: snapshot.signatureUrl,
+      signatureDirty: false,
+    };
 
-    if (measure(candidate, fontSize)) {
-      applyState(candidate, fontSize);
+    clearComposeBuffer(userId, draftId);
+  }
+
+  /* `[>]` is also a save button, so an explicit leave saves before navigating.
+     Other exits stay background saves: only a deliberate [draft] or [>] click
+     may set is_explicitly_saved. */
+  function requestLeave(to, explicit = false) {
+    if (isSavedDraft && isEditing) {
+      setLeaveRequest({ kind: "route", to, explicit });
       return;
     }
 
-    /* Remember where the view was before the rejected keystroke moved it. */
-    keepScrollTop.current = letterRef.current?.scrollTop ?? null;
-
-    applyState(candidate, fontSize);
-    flashToast("max length reached");
+    if (explicit) enqueueSave({ explicit: true }).catch(() => {});
+    navigate(to);
   }
 
-  /* A font size is only accepted if the letter still fits at that size.
-     Sliding past the ceiling is simply held back; no text is touched. */
-  function handleFontSizeChange(event) {
-    const requested = Number(event.target.value);
-    applyState(text, Math.min(requested, maxFontSize));
+  async function confirmLeave() {
+    const request = leaveRequest;
+    if (!request) return;
+
+    const saved = await commitEditedDraft(request.explicit);
+
+    if (!saved) {
+      /* Stay in edit mode with the changes, and put the history trap back if
+         this prompt came from Browser Back. */
+      setLeaveRequest(null);
+      armHistorySentinel();
+      return;
+    }
+
+    setLeaveRequest(null);
+    finishLeave(request);
   }
 
-  /* Manual save shares the autosave queue, so the two can never race. */
+  function discardLeave() {
+    const request = leaveRequest;
+    if (!request) return;
+
+    restoreSavedDraft();
+    setLeaveRequest(null);
+    setIsEditing(false);
+    finishLeave(request);
+  }
+
+  /* Manual save for a new letter shares the autosave queue, so the two can
+     never race. The explicit flag is what clears the Drafts "auto-saved" tag. */
   async function saveDraft() {
     if (savingDraft) return;
 
@@ -858,7 +606,7 @@ function ComposeLetter() {
     setSavingDraft(true);
 
     try {
-      const result = await enqueueSave();
+      const result = await enqueueSave({ explicit: true });
 
       if (result?.error) {
         flashToast(result.error?.message || "could not save draft");
@@ -884,29 +632,35 @@ function ComposeLetter() {
   }
 
   return (
-    <main className="compose">
+    <main className={`compose${isSavedDraft ? " compose--saved" : ""}`}>
       <h1 className="compose__title">Compose Letter</h1>
 
       <div className="compose__frame">
         <div className="compose__heading">
-          <input
-            id="letter-title"
-            className="compose__title-input"
-            type="text"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder={DEFAULT_TITLE}
-            aria-label="Letter Title"
-            autoComplete="off"
-            maxLength={MAX_TITLE_LENGTH}
-          />
+          {isEditing ? (
+            <input
+              id="letter-title"
+              className="compose__title-input"
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder={DEFAULT_TITLE}
+              aria-label="Letter Title"
+              autoComplete="off"
+              maxLength={MAX_TITLE_LENGTH}
+            />
+          ) : (
+            <p className="compose__title-static">
+              {title.trim() || DEFAULT_TITLE}
+            </p>
+          )}
         </div>
 
         <div className="compose__paper">
           <button
             type="button"
             className="compose__back"
-            onClick={() => navigate("/post-office")}
+            onClick={() => requestLeave("/post-office")}
             aria-label="Back"
           >
             &lt;
@@ -915,56 +669,135 @@ function ComposeLetter() {
           <button
             type="button"
             className="compose__next"
-            onClick={() => navigate("/post-office/post")}
+            onClick={() => requestLeave("/post-office/post", true)}
             aria-label="Next"
           >
             &gt;
           </button>
 
-          <button
-            type="button"
-            className="compose__draft"
-            onClick={saveDraft}
-            disabled={savingDraft}
-          >
-            {savingDraft ? "saving..." : "draft"}
-          </button>
+          {!isSavedDraft && (
+            <button
+              type="button"
+              className="compose__draft"
+              onClick={saveDraft}
+              disabled={savingDraft}
+            >
+              {savingDraft ? "saving..." : "draft"}
+            </button>
+          )}
 
+          {/* Kept as a textarea even when read-only so the off-screen ruler can
+              still measure the saved letter and choose a size that fits. */}
           <textarea
             ref={letterRef}
-            className="compose__letter"
+            className={`compose__letter${
+              isEditing ? "" : " compose__letter--readonly"
+            }`}
             style={{ fontSize: `${fontSize}px` }}
             value={text}
             onChange={handleChange}
-            placeholder="Write your letter…"
+            readOnly={!isEditing}
+            placeholder={isEditing ? "Write your letter…" : ""}
             aria-label="Letter"
             spellCheck="true"
           />
 
           <div className="compose__paper-foot">
-            <SignaturePad
-              key={signatureLoadVersion}
-              className="compose__signature"
-              initialData={signatureData}
-              onChange={handleSignatureChange}
-            />
+            {isEditing ? (
+              <SignaturePad
+                key={signatureLoadVersion}
+                className="compose__signature"
+                initialData={signatureData}
+                onChange={handleSignatureChange}
+              />
+            ) : (
+              (signatureUrl || signatureData) && (
+                <img
+                  className="compose__signature compose__signature-image"
+                  src={signatureUrl || signatureData}
+                  alt="Signature"
+                />
+              )
+            )}
           </div>
         </div>
 
-        <input
-          type="range"
-          className="compose__size"
-          min={MIN_FONT_SIZE}
-          max={maxFontSize}
-          step="1"
-          value={fontSize}
-          onChange={handleFontSizeChange}
-          aria-label="Letter text size"
-        />
+        {isEditing && (
+          <input
+            type="range"
+            className="compose__size"
+            min={MIN_FONT_SIZE}
+            max={maxFontSize}
+            step="1"
+            value={fontSize}
+            onChange={handleFontSizeChange}
+            aria-label="Letter text size"
+          />
+        )}
+
+        {isOverflowing && (
+          <p className="compose__overflow" role="status">
+            This letter is too long to fit on one page at the smallest font size.
+          </p>
+        )}
       </div>
+
+      {isSavedDraft && (
+        <button
+          type="button"
+          className="compose__mode"
+          onClick={isEditing ? saveEditedDraft : enterEditMode}
+          disabled={!draftLoaded || savingDraft}
+        >
+          {savingDraft ? "saving..." : isEditing ? "save" : "edit"}
+        </button>
+      )}
 
       {/* Off-screen copy of the letter, used only to measure text height. */}
       <div ref={rulerRef} className="compose__ruler" aria-hidden="true" />
+
+      {leaveRequest && (
+        <div
+          className="compose__dialog-backdrop"
+          onClick={cancelLeave}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") cancelLeave();
+          }}
+        >
+          <div
+            className="compose__dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="compose-leave-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="compose__dialog-text" id="compose-leave-title">
+              Save changes before leaving?
+            </p>
+
+            <div className="compose__dialog-actions">
+              <button
+                type="button"
+                className="compose__dialog-button"
+                onClick={confirmLeave}
+                disabled={savingDraft}
+                autoFocus
+              >
+                Yes
+              </button>
+
+              <button
+                type="button"
+                className="compose__dialog-button"
+                onClick={discardLeave}
+                disabled={savingDraft}
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showToast && (
         <p className="compose__toast" role="status">
