@@ -67,23 +67,40 @@
   list-style: none;
 }
 
+/* The card outline is a stretched inline SVG (see draftShapes.jsx), so the box
+   itself has no border. The SVG is an absolute layer behind the text, which is
+   why the text siblings carry z-index 1. */
 .drafts__card {
+  position: relative;
   box-sizing: border-box;
   display: flex;
   align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   min-height: 120px;
   padding: 16px;
-  border: 1px solid #000;
-  border-radius: 4px;
-  background: #fff;
+  background-color: #fff;
   color: #000;
   text-decoration: none;
   overflow-wrap: anywhere;
   cursor: pointer;
 }
 
+/* All four shapes are normalised onto one 80x97 canvas (see draftShapes.jsx),
+   so mapping that canvas to the card box gives every card the same width and
+   height instead of letterboxing at each file's intrinsic size. */
+.drafts__card-shape {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+
 .drafts__card:hover {
-  background: #f3f3f3;
+  background-color: #f3f3f3;
 }
 
 .drafts__card:focus-visible {
@@ -92,8 +109,28 @@
 }
 
 .drafts__card-title {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-width: 0;
   font-size: clamp(15px, 1.5vw, 18px);
   line-height: 1.35;
+}
+
+/* A draft that only autosave has written. An explicit [draft]/[>] save sets
+   is_explicitly_saved and this tag disappears. */
+.drafts__card-tag {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  padding: 2px 5px;
+  border-radius: 2px;
+  background: rgba(179, 38, 30, 0.85);
+  color: #fff;
+  font-size: 9px;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .drafts__message {

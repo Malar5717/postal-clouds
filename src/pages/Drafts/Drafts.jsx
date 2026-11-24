@@ -3,11 +3,14 @@ import { Link } from "react-router-dom";
 import { useAuth } from "@clerk/clerk-react";
 
 import { useSupabase } from "../../lib/SupabaseProvider";
+import DraftShape from "./draftShapes";
 import "./Drafts.css";
 
 /* Lists the signed-in user's saved drafts. RLS limits reads to the sender;
    the explicit sender_id filter keeps the query clear. Opening a card uses
-   the compose route's :draftId param so the editor loads the existing row. */
+   the compose route's :draftId param so the editor loads the existing row.
+   A row that only autosave has touched is tagged "auto-saved"; an explicit
+   [draft]/[>] click clears the tag. */
 function Drafts() {
   const { userId } = useAuth();
   const supabase = useSupabase();
@@ -24,7 +27,7 @@ function Drafts() {
     async function loadDrafts() {
       const { data, error: loadError } = await supabase
         .from("letters")
-        .select("id, title")
+        .select("id, title, is_explicitly_saved")
         .eq("sender_id", userId)
         .eq("status", "DRAFT")
         .order("created_at", { ascending: false });
@@ -94,15 +97,23 @@ function Drafts() {
           <ul className="drafts__grid">
             {drafts.map((draft) => {
               const title = draft.title || "untitled";
+              const autoSaved = !draft.is_explicitly_saved;
 
               return (
                 <li key={draft.id}>
                   <Link
                     className="drafts__card"
                     to={`/post-office/compose/${draft.id}`}
-                    aria-label={`Open draft: ${title}`}
+                    aria-label={`Open draft: ${title}${
+                      autoSaved ? " (auto-saved)" : ""
+                    }`}
                   >
+                    <DraftShape draftId={draft.id} />
+
                     <span className="drafts__card-title">{title}</span>
+                    {autoSaved && (
+                      <span className="drafts__card-tag">auto-saved</span>
+                    )}
                   </Link>
                 </li>
               );
