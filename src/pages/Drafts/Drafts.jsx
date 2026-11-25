@@ -108,7 +108,7 @@ function Drafts() {
                       autoSaved ? " (auto-saved)" : ""
                     }`}
                   >
-                    <DraftShape draftId={draft.id} />
+                    <DraftShape />
 
                     <span className="drafts__card-title">{title}</span>
                     {autoSaved && (

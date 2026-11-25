@@ -49,24 +49,18 @@ function fitToCanvas(width, height) {
   return `translate(${offsetX.toFixed(4)} ${offsetY.toFixed(4)}) scale(${scale.toFixed(5)})`;
 }
 
-/* The draft id decides the shape, so a card keeps the same paper across
-   re-renders, retries and reloads instead of reshuffling every render. */
-function shapeForDraft(id) {
-  let hash = 0;
-
-  for (let index = 0; index < id.length; index += 1) {
-    hash = (hash * 31 + id.charCodeAt(index)) >>> 0;
-  }
-
-  return SHAPES[hash % SHAPES.length];
+/* A fresh shape on every mount: opening the shelf or returning to it rerolls
+   each card instead of remembering one per draft. */
+function randomShape() {
+  return SHAPES[Math.floor(Math.random() * SHAPES.length)];
 }
 
 /* width/height 100% with preserveAspectRatio="none" makes the shared canvas
    fill the card box exactly, so every card is framed edge to edge. The
    non-uniform box stretch would fatten strokes on one axis, so vector-effect
    keeps the outline at a steady width. */
-function DraftShape({ draftId }) {
-  const shape = shapeForDraft(draftId);
+function DraftShape() {
+  const shape = randomShape();
 
   return (
     <svg
